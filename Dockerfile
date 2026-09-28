@@ -5,6 +5,10 @@
 #              -e G8TE_UPSTREAM=http://web:3000 ghcr.io/xtr-dev/g8te-agent
 FROM fatedier/frpc:v0.71.0
 
+# Links the published image to this repository on GitHub (and so its visibility and README).
+LABEL org.opencontainers.image.source="https://github.com/xtr-dev/g8te-agent" \
+      org.opencontainers.image.description="Tunnel agent for g8te: connects a web app to a g8te gate"
+
 RUN apk add --no-cache curl jq ca-certificates tini
 COPY entrypoint.sh /usr/local/bin/g8te-agent
 RUN chmod +x /usr/local/bin/g8te-agent \
