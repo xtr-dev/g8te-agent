@@ -122,7 +122,8 @@ secrets:
 | `connect to server error: dial tcp …:7000: i/o timeout` | Port 7000 to the tunnel host is blocked by a firewall. |
 | `token rejected by the portal; stopping the tunnel` | The token was rotated or the app deleted. |
 | The setup code command fails with `410` (*unknown, already used or expired*) | Each code works once, for 24 hours, and only until a new token is issued. Issue a new agent token on the app's page for a fresh setup prompt. |
-| The agent starts without a token after running the setup code command | `.env` wasn't next to `docker-compose.yml`, or it still has an older `G8TE_TOKEN=` line above the new one; keep only the newest line. |
+| `G8TE_TOKEN` is empty after running the setup code command | The command ran in another directory; `.env` must be next to `docker-compose.yml`. |
+| The token is rejected right after setting up | `.env` still has an older `G8TE_TOKEN=` line; keep only the newest one. |
 
 When the agent is connected, the app shows as **connected** in the portal.
 More in g8te's [guide for connecting an app](https://github.com/xtr-dev/g8te/blob/main/docs/connect-an-app.md).
