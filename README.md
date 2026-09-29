@@ -14,10 +14,38 @@ agent fetches its tunnel configuration from your g8te portal with its agent
 token, and restarts the tunnel when that configuration changes (for example
 when the app moves to another domain).
 
-## Run it
+## Get the agent token
 
-You get the agent token (`g8a_…`) when you create an app in the g8te portal
-(or through its API or MCP server).
+Each app has one agent token (`g8a_…`). You get it when you create the app in
+the g8te portal, or when you issue a new one on the app's page, in one of two
+ways:
+
+- **Shown once on screen**, together with a ready-to-run `docker run` command.
+  Copy it into a secret store or the project's `.env` right away.
+- **Through a one-time setup code** (`g8s_…`), for setting up with a coding
+  agent (Claude Code, Cursor, …). The portal gives you a setup prompt, with a
+  copy and a download button, that contains the code instead of the token,
+  because prompts end up in chat histories. The prompt has the coding agent run
+  this once, in the directory that holds the project's `.env`:
+
+  ```sh
+  curl -fsS -X POST https://apps.example.com/api/agent/v1/setup -d code=g8s_… >> .env
+  ```
+
+  The portal answers with a `G8TE_TOKEN=g8a_…` line, which is appended to
+  `.env` without being printed. A setup code works once, expires after 24
+  hours, and stops working when a new agent token is issued. If it has been
+  used or has expired, the command fails and writes nothing; issue a new token
+  on the app's page to get a fresh prompt.
+
+Through g8te's API or MCP server, creating an app returns the token directly,
+along with the same setup prompt.
+
+Keep `.env` out of version control. Anyone holding the token can connect a
+tunnel for your app; if it may have leaked, issue a new one on the app's page
+(the old one stops working at once).
+
+## Run it
 
 ```sh
 docker run -d --name g8te-agent --restart unless-stopped \
@@ -41,7 +69,20 @@ services:
     restart: unless-stopped
     environment:
       G8TE_PORTAL: https://apps.example.com
-      G8TE_TOKEN_FILE: /run/secrets/g8te_token   # or G8TE_TOKEN: g8a_…
+      G8TE_TOKEN: ${G8TE_TOKEN}   # from the project's .env (see above)
+      G8TE_UPSTREAM: http://web:3000
+```
+
+Docker Compose reads `G8TE_TOKEN` from the `.env` file next to
+`docker-compose.yml`, which is where the setup code command puts it. To use a
+Docker secret instead, set `G8TE_TOKEN_FILE`:
+
+```yaml
+  g8te-agent:
+    image: ghcr.io/xtr-dev/g8te-agent:latest
+    environment:
+      G8TE_PORTAL: https://apps.example.com
+      G8TE_TOKEN_FILE: /run/secrets/g8te_token
       G8TE_UPSTREAM: http://web:3000
     secrets: [g8te_token]
 secrets:
@@ -80,6 +121,8 @@ secrets:
 | `cannot fetch configuration … token rejected or portal unreachable` | Wrong `G8TE_PORTAL`, or the token was replaced; issue a new one on the app's page. |
 | `connect to server error: dial tcp …:7000: i/o timeout` | Port 7000 to the tunnel host is blocked by a firewall. |
 | `token rejected by the portal; stopping the tunnel` | The token was rotated or the app deleted. |
+| The setup code command fails with `410` (*unknown, already used or expired*) | Each code works once, for 24 hours, and only until a new token is issued. Issue a new agent token on the app's page for a fresh setup prompt. |
+| The agent starts without a token after running the setup code command | `.env` wasn't next to `docker-compose.yml`, or it still has an older `G8TE_TOKEN=` line above the new one; keep only the newest line. |
 
 When the agent is connected, the app shows as **connected** in the portal.
 More in g8te's [guide for connecting an app](https://github.com/xtr-dev/g8te/blob/main/docs/connect-an-app.md).
