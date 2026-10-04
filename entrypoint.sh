@@ -11,6 +11,7 @@
 #   G8TE_TOKEN         agent token g8a_… (required, or G8TE_TOKEN_FILE)
 #   G8TE_TOKEN_FILE    file containing the token (e.g. a Docker secret); waited for if missing
 #   G8TE_UPSTREAM      the app, e.g. http://web:3000 (required; http only)
+#   G8TE_TCP_HOST      where TCP ports assigned by a g8te admin lead (default: the upstream's host)
 #   G8TE_PORTAL_CA     optional CA bundle for reaching the portal (test setups)
 #   G8TE_POLL_SECONDS  how often to check for configuration changes (default 60)
 set -eu
@@ -47,6 +48,7 @@ upstream="${upstream%%/*}"
 UPSTREAM_HOST="${upstream%:*}"
 UPSTREAM_PORT="${upstream##*:}"
 [ "$UPSTREAM_PORT" = "$upstream" ] && UPSTREAM_PORT=80
+TCP_HOST="${G8TE_TCP_HOST:-$UPSTREAM_HOST}"
 
 # Fetches the configuration. Returns 0 on success, 2 when the portal rejects
 # the token (revoked or rotated), 1 on any other failure (network, portal down).
@@ -67,6 +69,7 @@ write_frpc_config() {
         --arg token "$TOKEN" \
         --arg ca "$WORK/ca.pem" \
         --arg upstream_host "$UPSTREAM_HOST" \
+        --arg tcp_host "$TCP_HOST" \
         --argjson upstream_port "$UPSTREAM_PORT" '
         "serverAddr = \(.server_addr | tojson)\n" +
         "serverPort = \(.server_port)\n" +
@@ -86,7 +89,16 @@ write_frpc_config() {
         "localIP = \($upstream_host | tojson)\n" +
         "localPort = \($upstream_port)\n" +
         "customDomains = [\(.routing_key | tojson)]\n" +
-        "hostHeaderRewrite = \(.host_header | tojson)\n"
+        "hostHeaderRewrite = \(.host_header | tojson)\n" +
+        # Raw TCP ports a g8te platform admin assigned to the app (for example SSH).
+        ([(.tcp_ports // [])[] |
+            "\n[[proxies]]\n" +
+            "name = \(.proxy_name | tojson)\n" +
+            "type = \"tcp\"\n" +
+            "localIP = \($tcp_host | tojson)\n" +
+            "localPort = \(.local_port)\n" +
+            "remotePort = \(.remote_port)\n"
+        ] | join(""))
     ' "$WORK/config.json" > "$WORK/frpc.toml"
 }
 
@@ -113,6 +125,9 @@ start_frpc() {
     FRPC_PID=$!
     CURRENT_ETAG="$(jq -r '.etag' "$WORK/config.json")"
     log "tunnel started for app $(jq -r '.app' "$WORK/config.json") (upstream $UPSTREAM_HOST:$UPSTREAM_PORT)"
+    jq -r '(.tcp_ports // [])[] | "\(.remote_port) \(.local_port)"' "$WORK/config.json" | while read -r remote local; do
+        log "TCP port $remote on the g8te server leads to $TCP_HOST:$local"
+    done
 }
 
 start_frpc

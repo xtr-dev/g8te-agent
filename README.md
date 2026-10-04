@@ -99,7 +99,20 @@ secrets:
 | `G8TE_TOKEN_FILE` | A file containing the token, e.g. a Docker secret. It is re-read, so replacing it switches tokens without a restart. |
 | `G8TE_UPSTREAM` | Where the agent finds your app: `http://host:port` (required; plain HTTP). |
 | `G8TE_POLL_SECONDS` | How often to check for configuration changes (default 60). |
+| `G8TE_TCP_HOST` | Where raw TCP ports lead (default: the host of `G8TE_UPSTREAM`). See below. |
 | `G8TE_PORTAL_CA` | Extra CA bundle for reaching the portal, for test setups with private certificates. |
+
+## TCP ports (SSH and the like)
+
+For a service that doesn't speak HTTP, such as SSH for a git server, a g8te
+platform admin can give the app public TCP ports, each leading to a local port.
+The agent picks them up from its configuration by itself and forwards public
+port → `G8TE_TCP_HOST:local port`. For Gitea, which serves web and SSH from one
+container, `G8TE_UPSTREAM=http://gitea:3000` is enough: the admin assigns, say,
+public port 2200 → local port 22, and users run `ssh -p 2200 git@<tunnel host>`.
+
+Connections on these ports don't pass g8te's sign-in. The service behind the
+port must authenticate on its own (SSH: keys only).
 
 ## Network and security
 
@@ -109,7 +122,8 @@ secrets:
 - The tunnel is TLS-encrypted, and the agent trusts only the g8te server's
   own certificate authority, which it receives from the portal. It can't be
   redirected to an impostor.
-- The agent can only register its own app's route; g8te refuses anything else.
+- The agent can only register its own app's route, plus TCP ports a g8te
+  platform admin assigned to the app; g8te refuses anything else.
 - If the portal rejects the token (rotated or revoked), the agent stops its
   tunnel until it gets a valid token.
 - The container runs as an unprivileged user.
